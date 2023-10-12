@@ -1,0 +1,3 @@
+name: assignment4
+runtime: java
+description: A minimal AWS Java Pulumi program
