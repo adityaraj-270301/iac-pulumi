@@ -1,4 +1,3 @@
-name: pulumi-demo
+name: pulumi-demo-project
 runtime: java
-description: pulumi-demo
-
+description: pulumi-demo-project
