@@ -1,4 +1,6 @@
-package assignment4.src.main.java.myproject;
+package myproject;
+
+import java.io.ObjectInputFilter.Config;
 
 import java.io.ObjectInputFilter.Config;
 
