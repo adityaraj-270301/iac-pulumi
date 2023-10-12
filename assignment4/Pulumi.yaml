@@ -1,3 +1,4 @@
-name: assignment4
+name: pulumi-demo
 runtime: java
-description: A minimal AWS Java Pulumi program
+description: pulumi-demo
+

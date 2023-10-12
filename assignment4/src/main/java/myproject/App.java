@@ -1,6 +1,5 @@
 package assignment4.src.main.java.myproject;
 
-
 import com.pulumi.Pulumi;
 import com.pulumi.core.Output;
 import com.pulumi.aws.s3.Bucket;
