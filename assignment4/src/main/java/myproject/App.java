@@ -1,5 +1,4 @@
-package assignment4.src.main.java.myproject;
-
+package myproject;
 
 import com.pulumi.Pulumi;
 import com.pulumi.core.Output;
