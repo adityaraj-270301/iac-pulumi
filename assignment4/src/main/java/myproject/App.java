@@ -2,6 +2,8 @@ package myproject;
 
 import java.io.ObjectInputFilter.Config;
 
+import java.io.ObjectInputFilter.Config;
+
 import com.pulumi.Pulumi;
 import com.pulumi.core.Output;
 import com.pulumi.aws.s3.Bucket;
