@@ -1,0 +1,4 @@
+encryptionsalt: v1:vdj9YijYcIg=:v1:HrYOe5PR6XluHGlS:40Frr1CATPyviWQ7eV2x1nFOqoknkw==
+config:
+  aws:region: us-east-1
+  myproject:vpcCidrBlock: "0.0.0.0/0"
