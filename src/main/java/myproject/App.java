@@ -5,6 +5,8 @@ import com.pulumi.aws.AwsFunctions;
 import com.pulumi.aws.Config;
 import com.pulumi.Pulumi;
 import com.pulumi.Context;
+import com.pulumi.aws.ec2.Instance;
+import com.pulumi.aws.ec2.InstanceArgs;
 import com.pulumi.aws.ec2.InternetGateway;
 import com.pulumi.aws.ec2.InternetGatewayArgs;
 import com.pulumi.aws.ec2.Route;
@@ -21,6 +23,7 @@ import com.pulumi.core.Output;
 import com.pulumi.aws.s3.Bucket;
 import com.pulumi.aws.ec2.SubnetArgs;
 import com.pulumi.aws.ec2.VpcArgs;
+import com.pulumi.aws.ec2.enums.InstanceType;
 import com.pulumi.aws.Provider;
 import com.pulumi.aws.ProviderArgs;
 
@@ -155,5 +158,14 @@ public class App {
         //     var bucket = new Bucket("my-bucket");
         //     ctx.export("bucketName", bucket.bucket());
         // });
+        var ec2Instance = new Instance("MyEC2Instance", InstanceArgs.builder()
+            .instanceType(InstanceType.T2_Micro)
+            .ami("ami-0cf4eae24d837aee9")  // Replace with your AMI ID
+            .subnetId("subnet-0a325fe35bf0b984c")  // Associate with a private subnet
+            //.securityGroups(List.of(yourSecurityGroup.id()))  // Attach your security group
+            .vpcSecurityGroupIds("sg-0c74c970282df84ab")
+            .userData("#!/bin/bash\nYour user data script here")  // Customize user data script if needed
+            .tags(Map.of("Name", "csye6225-assignment5-Instance"))
+            .build());
     }
 }
