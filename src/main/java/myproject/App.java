@@ -32,10 +32,8 @@ import com.pulumi.aws.route53.RecordArgs;
 import com.pulumi.aws.route53.Zone;
 import com.pulumi.aws.route53.ZoneArgs;
 import com.pulumi.core.Output;
-
-
+import com.pulumi.core.Output;
 import pulumirpc.Provider.CreateRequest;
-
 import com.pulumi.aws.s3.Bucket;
 import com.pulumi.aws.servicediscovery.PublicDnsNamespace;
 import com.pulumi.aws.ec2.SubnetArgs;
@@ -48,6 +46,8 @@ import com.pulumi.aws.iam.Role;
 import com.pulumi.aws.iam.RoleArgs;
 import com.pulumi.aws.iam.RolePolicyAttachment;
 import com.pulumi.aws.iam.RolePolicyAttachmentArgs;
+import com.pulumi.aws.ec2.inputs.SecurityGroupIngressArgs;
+import com.pulumi.aws.ec2.outputs.SecurityGroupIngress;
 import com.pulumi.aws.Provider;
 import com.pulumi.aws.ProviderArgs;
 import com.pulumi.aws.docdb.SubnetGroup;
@@ -210,6 +210,9 @@ public class App {
             // .build());
 
         SecurityGroup dbSecurityGroup = new SecurityGroup("DBSecurityGroup", new SecurityGroupArgs.Builder()
+
+        var dbSecurityGroup = new SecurityGroup("DBSecurityGroup", SecurityGroupArgs.builder()
+
             .vpcId(vpc.id())
             .description("DB Security Group")
             .ingress(SecurityGroupIngressArgs.builder()
@@ -221,6 +224,7 @@ public class App {
                 .build())
             .build()
         );
+
         //List<String> s = new ArrayList<>();
 
         System.out.println(dbSecurityGroup.id());
@@ -405,6 +409,91 @@ public class App {
             .ttl(60)
             .name("adevrecord")
             .records(ec2instanceList)
+
+
+
+        String dbSecurityGroupId = dbSecurityGroup.toString();
+        System.out.println(dbSecurityGroupId);
+        
+
+        SecurityGroup sg = new SecurityGroup("mySecurityGroup", new SecurityGroupArgs.Builder()
+            .vpcId(vpc.id()) // Replace with your VPC ID
+            .ingress(SecurityGroupIngressArgs.builder()
+                    .protocol("tcp")
+                    .fromPort(22)
+                    .toPort(22)
+                    .cidrBlocks("0.0.0.0/0") // Allow SSH from anywhere
+                    .description("SSH")
+                    .build())
+            .ingress(SecurityGroupIngressArgs.builder()
+                    .protocol("tcp")
+                    .fromPort(80)
+                    .toPort(80)
+                    .cidrBlocks("0.0.0.0/0") // Allow HTTP from anywhere
+                    .description("HTTP")
+                    .build())
+            .ingress(SecurityGroupIngressArgs.builder()
+                    .protocol("tcp")
+                    .fromPort(443)
+                    .toPort(443)
+                    .cidrBlocks("0.0.0.0/0") // Allow HTTPS from anywhere
+                    .description("HTTPS")
+                    .build())
+            .build());
+        
+        String rdsConfig = "{"
+            + "\"allocatedStorage\": 20,"
+            + "\"storageType\": \"gp2\","
+            + "\"engine\": \"mysql\","
+            + "\"engineVersion\": \"8.0\","
+            + "\"instanceClass\": \"db.t2.micro\","
+            + "\"multiAz\": false,"
+            + "\"name\": \"csye6225\","
+            + "\"username\": \"csye6225\","
+            + "\"password\": \"Moscow1327\","
+            + "\"publiclyAccessible\": false,"
+            + "\"dbSubnetGroupName\": \"YourDBSubnetGroup\","
+            + "\"dbName\": \"csye6225\""
+            + "}";
+        
+        // RdsDbInstance mysqldb = new RdsDbInstance("mysqldbms", new RdsDbInstanceArgs.Builder()
+        //     .rdsDbInstanceArn(rdsConfig)
+        //     .dbUser("admin")
+        //     .stackId("dev")
+        //     .dbPassword("Pass1234")
+        //     .build()
+        // );
+
+        Cluster dbCluster = new Cluster("myRdsCluster", new ClusterArgs.Builder()
+            .allocatedStorage(20)
+            .storageType("gp2")
+            .engine("mysql")
+            .engineVersion("8.0")
+            .dbClusterInstanceClass("db.t3.micro")
+            .skipFinalSnapshot(true)
+            .masterUsername("csye6225")
+            .masterPassword("Moscow1327")
+            .dbSubnetGroupName("")
+            .databaseName("csye6225")
+            .vpcSecurityGroupIds((Output<List<String>>) List.of(dbSecurityGroup.id()))
+            .build());
+
+        
+
+            
+        
+            
+        var ec2Instance = new Instance("MyEC2Instance", InstanceArgs.builder()
+            .instanceType(InstanceType.T2_Micro)
+            .keyName("pulumi-key-pair")
+            .ami("ami-0f2e959ff43a5085a")  // Replace with your AMI ID
+            .subnetId("subnet-0a325fe35bf0b984c")  // Associate with a private subnet
+            //.vpcSecurityGroupIds((Output<List<String>>) List.of(dbSecurityGroup.id()))  // Attach your security group
+            //.vpcSecurityGroupIds("sg-0c74c970282df84ab")
+            //.securityGroups(new String[]{dbSecurityGroup.name})
+            .vpcSecurityGroupIds((Output<List<String>>) List.of(dbSecurityGroup.id()))
+            .userData("#!/bin/bash\nYour user data script here")  // Customize user data script if needed
+            .tags(Map.of("Name", "csye6225-assignment5-Instance1"))
             .build());
             
     }
