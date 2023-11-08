@@ -319,8 +319,12 @@ public class App {
         );
         Output<List<String>> endpoint = Output.all(dbInstance.endpoint()).applyValue(ids -> ids);
         //String endpoint = dbInstance.endpoint().applyValue(null)
+
         Output<?> dbpointOutput = dbInstance.endpoint().applyValue(ids->ids.split(":")[0]);
         Output<List<String>> db1 = Output.all(dbSecurityGroup.id()).applyValue(ids -> ids);
+
+        Output<String> dbpointOutput = dbInstance.endpoint();
+
         
 
 
@@ -344,6 +348,7 @@ public class App {
         
         
         //Output<List<String>> rdsSecGrpOutput = dbInstance.endpoint();
+
 
         // String script = "#!/bin/bash\n" +
         //     "echo 'DATABASE_NAME="+databaseName+"' >> /etc/environment\n" +
@@ -387,6 +392,20 @@ public class App {
                 "    -s";
                     });
 
+        String script = "#!/bin/bash\n" +
+            "echo 'DATABASE_NAME="+databaseName+"' >> /etc/environment\n" +
+            "echo 'DATABASE_USER="+databaseUser+"' >> /etc/environment\n" +
+            "echo 'DATABASE_PASSWORD="+databasePassword+"' >> /etc/environment\n" +
+            "echo 'DATABASE_IP="+dbpointOutput+"' >> /etc/environment\n" +
+            "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \\\n" + //
+                    "    -a fetch-config \\\n" + //
+                    "    -m ec2 \\\n" + //
+                    "    -c file:/opt/cloudwatch-config.json \\\n" + //
+                    "    -s";
+        
+        
+
+
         
         Role instanceRole = new Role("instanceRole",
             RoleArgs.builder().assumeRolePolicy(
@@ -395,6 +414,7 @@ public class App {
 
         InstanceProfile instanceProfile = new InstanceProfile("instanceProfile", 
         InstanceProfileArgs.builder().role(instanceRole.name()).build());
+
         
         RolePolicyAttachment cloudWatchPolicy = new RolePolicyAttachment("CloudWatchPolicy",
             RolePolicyAttachmentArgs.builder().role(instanceRole.name()).policyArn("arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy").build());
@@ -406,6 +426,12 @@ public class App {
         String ami1 = "ami-0c716860a9b4382dc";
         String ami2 = "ami-0e1e60cc5db66582b";
         String ami3 = "ami-0a1989fad97ff6c3a";
+
+        System.out.println(script);
+        
+        String ami = "ami-0d9dd57228a3a3ed7";
+        String ami1 = "ami-0c716860a9b4382dc";
+
 
         String key_pair = "csye6225";
 
@@ -419,6 +445,13 @@ public class App {
             .vpcSecurityGroupIds(ec2SecGrpOutput)
             .iamInstanceProfile(instanceProfile.id())
             .userData(script1)
+
+            .ami(ami1)
+            .subnetId(publicSub.get(0).id())  
+            .vpcSecurityGroupIds(ec2SecGrpOutput)
+            .iamInstanceProfile(cloudWatchPolicy.id())
+            .userData(script)
+
             .tags(Map.of("Name", "csye6225-assignment5-Instance1"))
             .build());
 
