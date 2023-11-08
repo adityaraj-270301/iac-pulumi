@@ -32,8 +32,10 @@ import com.pulumi.aws.route53.RecordArgs;
 import com.pulumi.aws.route53.Zone;
 import com.pulumi.aws.route53.ZoneArgs;
 import com.pulumi.core.Output;
-import com.pulumi.core.Output;
+
+
 import pulumirpc.Provider.CreateRequest;
+
 import com.pulumi.aws.s3.Bucket;
 import com.pulumi.aws.servicediscovery.PublicDnsNamespace;
 import com.pulumi.aws.ec2.SubnetArgs;
@@ -42,12 +44,12 @@ import com.pulumi.aws.ec2.enums.InstanceType;
 import com.pulumi.aws.ec2.inputs.SecurityGroupEgressArgs;
 import com.pulumi.aws.ec2.inputs.SecurityGroupIngressArgs;
 import com.pulumi.aws.ec2.outputs.SecurityGroupIngress;
+import com.pulumi.aws.iam.InstanceProfile;
+import com.pulumi.aws.iam.InstanceProfileArgs;
 import com.pulumi.aws.iam.Role;
 import com.pulumi.aws.iam.RoleArgs;
 import com.pulumi.aws.iam.RolePolicyAttachment;
 import com.pulumi.aws.iam.RolePolicyAttachmentArgs;
-import com.pulumi.aws.ec2.inputs.SecurityGroupIngressArgs;
-import com.pulumi.aws.ec2.outputs.SecurityGroupIngress;
 import com.pulumi.aws.Provider;
 import com.pulumi.aws.ProviderArgs;
 import com.pulumi.aws.docdb.SubnetGroup;
@@ -210,9 +212,6 @@ public class App {
             // .build());
 
         SecurityGroup dbSecurityGroup = new SecurityGroup("DBSecurityGroup", new SecurityGroupArgs.Builder()
-
-        var dbSecurityGroup = new SecurityGroup("DBSecurityGroup", SecurityGroupArgs.builder()
-
             .vpcId(vpc.id())
             .description("DB Security Group")
             .ingress(SecurityGroupIngressArgs.builder()
@@ -224,7 +223,6 @@ public class App {
                 .build())
             .build()
         );
-
         //List<String> s = new ArrayList<>();
 
         System.out.println(dbSecurityGroup.id());
@@ -317,7 +315,8 @@ public class App {
         );
         Output<List<String>> endpoint = Output.all(dbInstance.endpoint()).applyValue(ids -> ids);
         //String endpoint = dbInstance.endpoint().applyValue(null)
-        Output<String> dbpointOutput = dbInstance.endpoint();
+        Output<?> dbpointOutput = dbInstance.endpoint().applyValue(ids->ids.split(":")[0]);
+        Output<List<String>> db1 = Output.all(dbSecurityGroup.id()).applyValue(ids -> ids);
         
 
 
@@ -342,33 +341,67 @@ public class App {
         
         //Output<List<String>> rdsSecGrpOutput = dbInstance.endpoint();
 
-        String script = "#!/bin/bash\n" +
-            "echo 'DATABASE_NAME="+databaseName+"' >> /etc/environment\n" +
-            "echo 'DATABASE_USER="+databaseUser+"' >> /etc/environment\n" +
-            "echo 'DATABASE_PASSWORD="+databasePassword+"' >> /etc/environment\n" +
-            "echo 'DATABASE_IP="+dbpointOutput+"' >> /etc/environment\n" +
-            "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \\\n" + //
-                    "    -a fetch-config \\\n" + //
-                    "    -m ec2 \\\n" + //
-                    "    -c file:/opt/cloudwatch-config.json \\\n" + //
-                    "    -s";
+        // String script = "#!/bin/bash\n" +
+        //     "echo 'DATABASE_NAME="+databaseName+"' >> /etc/environment\n" +
+        //     "echo 'DATABASE_USER="+databaseUser+"' >> /etc/environment\n" +
+        //     "echo 'DATABASE_PASSWORD="+databasePassword+"' >> /etc/environment\n" +
+        //     "echo 'DATABASE_IP="+dbpointOutput+"' >> /etc/environment\n" +
+        //     "sudo systemctl daemon-reload"+
+        //     "sudo systemctl start webappstart.service" +
+        //     "sudo systemctl enable webappstart.service" +
+        //     "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \\\n" + //
+        //             "    -a fetch-config \\\n" + //
+        //             "    -m ec2 \\\n" + //
+        //             "    -c file:/opt/cloudwatch-config.json \\\n" + //
+        //             "    -s";
         
-        
+        Output<String> script1 = dbpointOutput.applyValue(dbpoint -> {
+            return "#!/bin/bash\n" +
+                "echo 'DATABASE_NAME="+databaseName+"' >> /etc/environment\n" +
+                "echo 'DATABASE_USER="+databaseUser+"' >> /etc/environment\n" +
+                "echo 'DATABASE_PASSWORD="+databasePassword+"' >> /etc/environment\n" +
+                "echo 'DATABASE_IP="+dbpoint+"' >> /etc/environment\n" +
+                "touch custom.properties\n"+
+                "echo 'spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver' >> /home/admin/custom.properties\n"+
+                "echo 'spring.datasource.url=jdbc:mysql://"+dbpoint+":3306/"+databaseName +"' >> /home/admin/custom.properties\n" +
+                "echo 'spring.datasource.username="+databaseUser+"' >> /home/admin/custom.properties\n" +
+                "echo 'spring.datasource.password="+databasePassword+"' >> /home/admin/custom.properties\n" +
+                "echo 'spring.jpa.show-sql = true' >> /home/admin/custom.properties\n"+
+                "echo 'spring.jpa.hibernate.ddl-auto = create' >> /home/admin/custom.properties\n"+
+                "echo 'spring.jpa.properties.hibernate.dialect = org.hibernate.dialect.MySQL8Dialect' >> /home/admin/custom.properties\n"+
+                "echo 'server.port=8081' >> /home/admin/custom.properties\n"+
+                "echo 'logging.file.path=/var/log' >> /home/admin/custom.properties\n"+
+                "echo 'logging.file.name=/var/log/csye6225.log' >> /home/admin/custom.properties\n"+
+                "echo 'publish.metrics=true' >> /home/admin/custom.properties\n"+
+                "echo 'metrics.statsd.host=localhost' >> /home/admin/custom.properties\n"+
+                "echo 'metrics.statsd.port=8125' >> /home/admin/custom.properties\n"+
+                "echo 'metrics.statsd.port=8125' >> /home/admin/custom.properties\n"+
+                "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \\\n" + //
+                "    -a fetch-config \\\n" + //
+                "    -m ec2 \\\n" + //
+                "    -c file:/opt/cloudwatch-config.json \\\n" + //
+                "    -s";
+                    });
 
         
         Role instanceRole = new Role("instanceRole",
             RoleArgs.builder().assumeRolePolicy(
                 "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":\"sts:AssumeRole\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Effect\":\"Allow\"}]}")
             .build());
+
+        InstanceProfile instanceProfile = new InstanceProfile("instanceProfile", 
+        InstanceProfileArgs.builder().role(instanceRole.name()).build());
         
         RolePolicyAttachment cloudWatchPolicy = new RolePolicyAttachment("CloudWatchPolicy",
             RolePolicyAttachmentArgs.builder().role(instanceRole.name()).policyArn("arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy").build());
 
         
-        System.out.println(script);
+        //System.out.println(script);
         
         String ami = "ami-0d9dd57228a3a3ed7";
         String ami1 = "ami-0c716860a9b4382dc";
+        String ami2 = "ami-0e1e60cc5db66582b";
+        String ami3 = "ami-0a1989fad97ff6c3a";
 
         String key_pair = "csye6225";
 
@@ -377,11 +410,11 @@ public class App {
             .instanceType(InstanceType.T2_Micro)
             .keyName(key_pair)
             //.ami("ami-0bc0d752e4eaeb3fe")  // Replace with your AMI ID
-            .ami(ami1)
+            .ami(ami3)
             .subnetId(publicSub.get(0).id())  
             .vpcSecurityGroupIds(ec2SecGrpOutput)
-            .iamInstanceProfile(cloudWatchPolicy.id())
-            .userData(script)
+            .iamInstanceProfile(instanceProfile.id())
+            .userData(script1)
             .tags(Map.of("Name", "csye6225-assignment5-Instance1"))
             .build());
 
@@ -399,7 +432,7 @@ public class App {
             .type("A")
             .zoneId(devdnsZone.id())
             .ttl(60)
-            .name("adevrecord")
+            .name("")
             .records(ec2instanceList)
             .build());
         
@@ -407,93 +440,8 @@ public class App {
             .type("A")
             .zoneId(demodnsZone.id())
             .ttl(60)
-            .name("adevrecord")
+            .name("")
             .records(ec2instanceList)
-
-
-
-        String dbSecurityGroupId = dbSecurityGroup.toString();
-        System.out.println(dbSecurityGroupId);
-        
-
-        SecurityGroup sg = new SecurityGroup("mySecurityGroup", new SecurityGroupArgs.Builder()
-            .vpcId(vpc.id()) // Replace with your VPC ID
-            .ingress(SecurityGroupIngressArgs.builder()
-                    .protocol("tcp")
-                    .fromPort(22)
-                    .toPort(22)
-                    .cidrBlocks("0.0.0.0/0") // Allow SSH from anywhere
-                    .description("SSH")
-                    .build())
-            .ingress(SecurityGroupIngressArgs.builder()
-                    .protocol("tcp")
-                    .fromPort(80)
-                    .toPort(80)
-                    .cidrBlocks("0.0.0.0/0") // Allow HTTP from anywhere
-                    .description("HTTP")
-                    .build())
-            .ingress(SecurityGroupIngressArgs.builder()
-                    .protocol("tcp")
-                    .fromPort(443)
-                    .toPort(443)
-                    .cidrBlocks("0.0.0.0/0") // Allow HTTPS from anywhere
-                    .description("HTTPS")
-                    .build())
-            .build());
-        
-        String rdsConfig = "{"
-            + "\"allocatedStorage\": 20,"
-            + "\"storageType\": \"gp2\","
-            + "\"engine\": \"mysql\","
-            + "\"engineVersion\": \"8.0\","
-            + "\"instanceClass\": \"db.t2.micro\","
-            + "\"multiAz\": false,"
-            + "\"name\": \"csye6225\","
-            + "\"username\": \"csye6225\","
-            + "\"password\": \"Moscow1327\","
-            + "\"publiclyAccessible\": false,"
-            + "\"dbSubnetGroupName\": \"YourDBSubnetGroup\","
-            + "\"dbName\": \"csye6225\""
-            + "}";
-        
-        // RdsDbInstance mysqldb = new RdsDbInstance("mysqldbms", new RdsDbInstanceArgs.Builder()
-        //     .rdsDbInstanceArn(rdsConfig)
-        //     .dbUser("admin")
-        //     .stackId("dev")
-        //     .dbPassword("Pass1234")
-        //     .build()
-        // );
-
-        Cluster dbCluster = new Cluster("myRdsCluster", new ClusterArgs.Builder()
-            .allocatedStorage(20)
-            .storageType("gp2")
-            .engine("mysql")
-            .engineVersion("8.0")
-            .dbClusterInstanceClass("db.t3.micro")
-            .skipFinalSnapshot(true)
-            .masterUsername("csye6225")
-            .masterPassword("Moscow1327")
-            .dbSubnetGroupName("")
-            .databaseName("csye6225")
-            .vpcSecurityGroupIds((Output<List<String>>) List.of(dbSecurityGroup.id()))
-            .build());
-
-        
-
-            
-        
-            
-        var ec2Instance = new Instance("MyEC2Instance", InstanceArgs.builder()
-            .instanceType(InstanceType.T2_Micro)
-            .keyName("pulumi-key-pair")
-            .ami("ami-0f2e959ff43a5085a")  // Replace with your AMI ID
-            .subnetId("subnet-0a325fe35bf0b984c")  // Associate with a private subnet
-            //.vpcSecurityGroupIds((Output<List<String>>) List.of(dbSecurityGroup.id()))  // Attach your security group
-            //.vpcSecurityGroupIds("sg-0c74c970282df84ab")
-            //.securityGroups(new String[]{dbSecurityGroup.name})
-            .vpcSecurityGroupIds((Output<List<String>>) List.of(dbSecurityGroup.id()))
-            .userData("#!/bin/bash\nYour user data script here")  // Customize user data script if needed
-            .tags(Map.of("Name", "csye6225-assignment5-Instance1"))
             .build());
             
     }
