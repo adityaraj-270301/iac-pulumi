@@ -362,6 +362,8 @@ public class App {
                 "echo 'DATABASE_PASSWORD="+databasePassword+"' >> /etc/environment\n" +
                 "echo 'DATABASE_IP="+dbpoint+"' >> /etc/environment\n" +
                 "touch custom.properties\n"+
+                "sudo touch /opt/csye6225.log\n"+
+                "sudo chmod 777 /opt/csye6225.log\n"+
                 "echo 'spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver' >> /home/admin/custom.properties\n"+
                 "echo 'spring.datasource.url=jdbc:mysql://"+dbpoint+":3306/"+databaseName +"' >> /home/admin/custom.properties\n" +
                 "echo 'spring.datasource.username="+databaseUser+"' >> /home/admin/custom.properties\n" +
@@ -370,17 +372,18 @@ public class App {
                 "echo 'spring.jpa.hibernate.ddl-auto = create' >> /home/admin/custom.properties\n"+
                 "echo 'spring.jpa.properties.hibernate.dialect = org.hibernate.dialect.MySQL8Dialect' >> /home/admin/custom.properties\n"+
                 "echo 'server.port=8081' >> /home/admin/custom.properties\n"+
-                "echo 'logging.file.path=/var/log' >> /home/admin/custom.properties\n"+
-                "echo 'logging.file.name=/var/log/csye6225.log' >> /home/admin/custom.properties\n"+
+                "echo 'logging.file.path=/opt' >> /home/admin/custom.properties\n"+
+                "echo 'logging.file.name=/opt/csye6225.log' >> /home/admin/custom.properties\n"+
                 "echo 'publish.metrics=true' >> /home/admin/custom.properties\n"+
                 "echo 'metrics.statsd.host=localhost' >> /home/admin/custom.properties\n"+
                 "echo 'metrics.statsd.port=8125' >> /home/admin/custom.properties\n"+
-                "echo 'metrics.statsd.port=8125' >> /home/admin/custom.properties\n"+
-                "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \\\n" + //
-                "    -a fetch-config \\\n" + //
-                "    -m ec2 \\\n" + //
-                "    -c file:/opt/cloudwatch-config.json \\\n" + //
-                "    -s";
+                "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \\\n" + 
+                "    -a fetch-config \\\n" + 
+                "    -m ec2 \\\n" + 
+                "    -c file:/opt/cloudwatch-config.json \\\n" + 
+                "    -s\n" +
+                "sudo systemctl start amazon-cloudwatch-agent\n" +
+                "sudo systemctl enable amazon-cloudwatch-agent";
                     });
 
         
@@ -401,7 +404,7 @@ public class App {
         String ami = "ami-0d9dd57228a3a3ed7";
         String ami1 = "ami-0c716860a9b4382dc";
         String ami2 = "ami-0e1e60cc5db66582b";
-        String ami3 = "ami-0a1989fad97ff6c3a";
+        String ami3 = "ami-0e6758271534692cd";
 
         String key_pair = "csye6225";
 
