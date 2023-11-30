@@ -49,20 +49,23 @@ import com.pulumi.aws.route53.inputs.RecordAliasArgs;
 import com.pulumi.core.Output;
 
 
+import java.util.HashMap;
 import pulumirpc.Provider.CreateRequest;
 
 import com.pulumi.aws.s3.Bucket;
 import com.pulumi.aws.servicediscovery.PublicDnsNamespace;
 import com.pulumi.aws.sfn.Alias;
+import com.pulumi.aws.sns.Topic;
+import com.pulumi.aws.sns.TopicArgs;
 import com.pulumi.aws.ec2.SubnetArgs;
 import com.pulumi.aws.ec2.VpcArgs;
 import com.pulumi.aws.ec2.enums.InstanceType;
+import com.pulumi.aws.ec2.enums.ProtocolType;
 import com.pulumi.aws.ec2.inputs.LaunchTemplateIamInstanceProfileArgs;
 import com.pulumi.aws.ec2.inputs.LaunchTemplateNetworkInterfaceArgs;
 import com.pulumi.aws.ec2.inputs.LaunchTemplatePlacementArgs;
 import com.pulumi.aws.ec2.inputs.SecurityGroupEgressArgs;
 import com.pulumi.aws.ec2.inputs.SecurityGroupIngressArgs;
-import com.pulumi.aws.ec2.outputs.SecurityGroupIngress;
 import com.pulumi.aws.gamelift.AliasArgs;
 import com.pulumi.aws.iam.InstanceProfile;
 import com.pulumi.aws.iam.InstanceProfileArgs;
@@ -72,10 +75,11 @@ import com.pulumi.aws.iam.RolePolicyAttachment;
 import com.pulumi.aws.iam.RolePolicyAttachmentArgs;
 import com.pulumi.aws.Provider;
 import com.pulumi.aws.ProviderArgs;
+
 import com.pulumi.aws.lb.TargetGroupArgs;
 import com.pulumi.aws.lb.inputs.ListenerDefaultActionArgs;
 import com.pulumi.aws.lb.inputs.TargetGroupHealthCheckArgs;
-import com.pulumi.aws.lb.inputs.TargetGroupTargetHealthStateArgs;
+
 import com.pulumi.aws.autoscaling.Attachment;
 import com.pulumi.aws.autoscaling.AttachmentArgs;
 import com.pulumi.aws.autoscaling.Group;
@@ -88,15 +92,32 @@ import com.pulumi.aws.autoscaling.inputs.GroupMixedInstancesPolicyLaunchTemplate
 import com.pulumi.aws.autoscaling.inputs.GroupMixedInstancesPolicyLaunchTemplateLaunchTemplateSpecificationArgs;
 import com.pulumi.aws.cloudwatch.MetricAlarm;
 import com.pulumi.aws.cloudwatch.MetricAlarmArgs;
+import com.pulumi.aws.codecatalyst.SourceRepositoryArgs;
 import com.pulumi.aws.docdb.SubnetGroup;
 import com.pulumi.aws.docdb.SubnetGroupArgs;
 
+import java.net.ProtocolFamily;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import com.pulumi.gcp.storage.*;
+import com.pulumi.gcp.cloudfunctions.inputs.FunctionSecretEnvironmentVariableArgs;
+import com.pulumi.gcp.cloudfunctions.inputs.FunctionSourceRepositoryArgs;
+import com.pulumi.gcp.cloudfunctions.outputs.FunctionSecretEnvironmentVariable;
+import com.pulumi.gcp.iam.*;
+
+import com.pulumi.aws.dynamodb.*;
+import com.pulumi.aws.dynamodb.inputs.TableAttributeArgs;
+import com.pulumi.aws.lambda.*;
+import com.pulumi.gcp.serviceAccount.ServiceAccountFunctions;
+import com.pulumi.gcp.serviceAccount.Account;
+import com.pulumi.gcp.serviceAccount.Key;
 
 
 public class App {
@@ -236,44 +257,55 @@ public class App {
 
         System.out.println(dbSecurityGroup.id());
        
+
+        
+
         SecurityGroup sglb = new SecurityGroup("load balancer", new SecurityGroupArgs.Builder()
             .vpcId(vpc.id()) 
             .ingress(SecurityGroupIngressArgs.builder()
-                    .protocol("tcp")
+                    .protocol("TCP")
                     .fromPort(80)
                     .toPort(80)
                     .cidrBlocks("0.0.0.0/0") 
                     .description("HTTP")
                     .build())
             .ingress(SecurityGroupIngressArgs.builder()
-                    .protocol("tcp")
+                    .protocol("TCP")
                     .fromPort(443)
                     .toPort(443)
                     .cidrBlocks("0.0.0.0/0") 
                     .description("HTTPS")
+                    .build())
+            .egress(SecurityGroupEgressArgs.builder()
+                    .protocol("TCP")
+                    .fromPort(0)
+                    .toPort(0)
+                    .protocol("-1")
+                    .cidrBlocks("0.0.0.0/0") // Allow HTTPS from anywhere
+                    .description("egress rule")
                     .build())
             .build());
         Output<List<String>> lbSecGrpOutput = Output.all(sglb.id()).applyValue(ids -> ids);
 
         SecurityGroup appSecurityGroup = new SecurityGroup("loadBalancerSecurityGroup", new SecurityGroupArgs.Builder()
                 .vpcId(vpc.id())
-                // .ingress(SecurityGroupIngressArgs.builder()
-                //         .protocol("ssh")
-                //         .fromPort(22)
-                //         .toPort(22)
-                //         .cidrBlocks("0.0.0.0/0")
-                //         .securityGroups(lbSecGrpOutput)
-                //         .build())
-                // .ingress(SecurityGroupIngressArgs.builder()
-                //     .protocol("tcp")
-                //     .fromPort(8081)
-                //     .toPort(8081)
-                //     .cidrBlocks("0.0.0.0/0") // Allow HTTPS from anywhere
-                //     .description("Custom")
-                //     .securityGroups(lbSecGrpOutput)
-                //     .build())
-                .egress(SecurityGroupEgressArgs.builder()
+                .ingress(SecurityGroupIngressArgs.builder()
+                        .protocol("tcp")
+                        .fromPort(22)
+                        .toPort(22)
+                        
+                        .securityGroups(lbSecGrpOutput)
+                        .build())
+                .ingress(SecurityGroupIngressArgs.builder()
                     .protocol("tcp")
+                    .fromPort(8081)
+                    .toPort(8081)
+                    
+                    .description("Custom")
+                    .securityGroups(lbSecGrpOutput)
+                    .build())
+                .egress(SecurityGroupEgressArgs.builder()
+                    .protocol("TCP")
                     .fromPort(0)
                     .toPort(0)
                     .protocol("-1")
@@ -282,33 +314,33 @@ public class App {
                     .build())
                 .build());
 
-        SecurityGroupRule ingressRule8081 = new SecurityGroupRule(
-    "db_load_balancer_port_8081",
-    new SecurityGroupRuleArgs
-        .Builder()
-        .description("Enable 8081 from internet")
-        .type("ingress")
-        .fromPort(8081)
-        .toPort(8081)
-        .protocol("tcp")
-        .sourceSecurityGroupId(sglb.id())
-        .securityGroupId(appSecurityGroup.id())
-        .build()
-    );
+    //     SecurityGroupRule ingressRule8081 = new SecurityGroupRule(
+    // "app_SecurityGroup_port_8081",
+    // new SecurityGroupRuleArgs
+    //     .Builder()
+    //     .description("Enable 8081 from internet")
+    //     .type("ingress")
+    //     .fromPort(8081)
+    //     .toPort(8081)
+    //     .protocol("TCP")
+    //     .sourceSecurityGroupId(sglb.id())
+    //     .securityGroupId(appSecurityGroup.id())
+    //     .build()
+    // );
 
-        SecurityGroupRule ingressRule22 = new SecurityGroupRule(
-            "db_load_balancer_port_22",
-            new SecurityGroupRuleArgs
-                .Builder()
-                .description("Enable 22 from internet")
-                .type("ingress")
-                .fromPort(22)
-                .toPort(22)
-                .protocol("tcp")
-                .sourceSecurityGroupId(sglb.id())
-                .securityGroupId(appSecurityGroup.id())
-                .build()
-        );
+        // SecurityGroupRule ingressRule22 = new SecurityGroupRule(
+        //     "db_load_balancer_port_22",
+        //     new SecurityGroupRuleArgs
+        //         .Builder()
+        //         .description("Enable 22 from internet")
+        //         .type("ingress")
+        //         .fromPort(22)
+        //         .toPort(22)
+        //         .protocol("TCP")
+        //         .sourceSecurityGroupId(sglb.id())
+        //         .securityGroupId(appSecurityGroup.id())
+        //         .build()
+        // );
                 
         Output<List<String>> appSecurityGroupOutput = Output.all(appSecurityGroup.id()).applyValue(ids -> ids);
             
@@ -377,7 +409,7 @@ public class App {
         
         
         Output<String> script1 = dbpointOutput.applyValue(dbpoint -> {
-            return "#!/bin/bash\n" +
+            String script = "#!/bin/bash\n" +
                 "echo 'DATABASE_NAME="+databaseName+"' >> /etc/environment\n" +
                 "echo 'DATABASE_USER="+databaseUser+"' >> /etc/environment\n" +
                 "echo 'DATABASE_PASSWORD="+databasePassword+"' >> /etc/environment\n" +
@@ -405,7 +437,10 @@ public class App {
                 "    -s\n" +
                 "sudo systemctl start amazon-cloudwatch-agent\n" +
                 "sudo systemctl enable amazon-cloudwatch-agent";
+                return Base64.getEncoder().encodeToString(script.getBytes());
                     });
+
+        
 
         
         Role instanceRole = new Role("instanceRole",
@@ -417,7 +452,7 @@ public class App {
         InstanceProfileArgs.builder().role(instanceRole.name()).build());
         
         RolePolicyAttachment cloudWatchPolicy = new RolePolicyAttachment("CloudWatchPolicy",
-            RolePolicyAttachmentArgs.builder().role(instanceRole.name()).policyArn("arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy").build());
+        RolePolicyAttachmentArgs.builder().role(instanceRole.name()).policyArn("arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy").build());
 
         
         //System.out.println(script);
@@ -436,6 +471,9 @@ public class App {
         
         // Get availability zones in current region
         //GetAvailabilityZonesResult availabilityZones = aws.GetAvailabilityZones.invoke().apply(availabilityZoneResult -> availabilityZoneResult);
+
+     
+        
 
         var launchTemplate = new LaunchTemplate("csye6225LaunchTemplate", LaunchTemplateArgs.builder()
             .imageId(ami3)
@@ -470,7 +508,7 @@ public class App {
                     .launchTemplate(GroupMixedInstancesPolicyLaunchTemplateArgs.builder()
                         .launchTemplateSpecification(GroupMixedInstancesPolicyLaunchTemplateLaunchTemplateSpecificationArgs.builder()
                             .launchTemplateId(launchTemplate.id())
-                            .version("$latest")
+                            .version("$Latest")
                             .build()
                         )
                         .build()
@@ -510,6 +548,9 @@ public class App {
 
         Output<List<String>> csye6225f23_ScalingGroupOutput = Output.all(csye6225f23_ScalingGroup.arn()).applyValue(ids -> ids);
 
+        Output<List<String>> scaleupOutput = Output.all(scaleup.arn()).applyValue(ids -> ids);
+        Output<List<String>> scaleDownOutput = Output.all(scaledown.arn()).applyValue(ids -> ids);
+
         MetricAlarm scaleUpAlarm = new MetricAlarm("scaleUpAlarm", MetricAlarmArgs.builder()
             .comparisonOperator("GreaterThanOrEqualToThreshold")
             .evaluationPeriods(2)
@@ -520,7 +561,7 @@ public class App {
             .threshold(3.0)
             .actionsEnabled(true)
             .unit("Percent")
-            .alarmActions(csye6225f23_ScalingGroupOutput)
+            .alarmActions()
             .build() 
         );
 
@@ -535,26 +576,73 @@ public class App {
             .actionsEnabled(true)
             .unit("Percent")
             //.dimensions(DimensionArgs)
-            .alarmActions(csye6225f23_ScalingGroupOutput)
+            .alarmActions(scaleDownOutput)
             .build() 
         );
 
         
 
-        com.pulumi.aws.alb.TargetGroup tg = new com.pulumi.aws.alb.TargetGroup("exampleTargetGroup", com.pulumi.aws.alb.TargetGroupArgs.builder()
+        // TargetGroup tg = new TargetGroup("exampleTargetGroup", new TargetGroupArgs.Builder()
+        //     .vpcId(vpc.id())
+        //     .port(80) // Application listens on port 80
+        //     .protocol("HTTP")
+        //     .targetHealthStates(new TargetGroupTargetHealthStateArgs.Builder() 
+        //         .enableUnhealthyConnectionTermination(false)
+        //         .build())
+            
+        //     .healthCheck(new TargetGroupHealthCheckArgs.Builder()
+        //         .path("/healthz")
+        //         .matcher("200")
+        //         .healthyThreshold(2)
+        //         .unhealthyThreshold(3)
+        //         .interval(15)
+        //         .timeout(5)
+                
+        //         .build()
+        //     )
+            
+            
+        //     .build()
+        // );
+
+        
+
+        // TargetGroup tg = new TargetGroup("TargetGroup", TargetGroupArgs.builder()
+        //     .vpcId(vpc.id())
+        //     .port(8081)
+        //     .protocol("HTTP")
+        //     .targetType("instance")
+        //     .targetHealthStates(Arrays.asList(TargetGroupTargetHealthStateArgs.builder() 
+        //             .enableUnhealthyConnectionTermination(true)
+        //         .build()))
+        //     .healthCheck(TargetGroupHealthCheckArgs.builder()
+        //         .path("/healthz")
+        //         .protocol("HTTP")
+        //         .healthyThreshold(5)
+        //         .unhealthyThreshold(5)
+                
+        //         .build()
+        //     )
+            
+            
+        //     .build()
+        // );
+        //Output<List<TargetGroupTargetHealthState>> targetHealths = tg1.targetHealthStates();
+
+        
+        com.pulumi.aws.alb.TargetGroup tg1 = new com.pulumi.aws.alb.TargetGroup("TargetGroup", com.pulumi.aws.alb.TargetGroupArgs.builder()
             .vpcId(vpc.id())
-            .port(80) // Application listens on port 80
+            .port(8081)
             .protocol("HTTP")
-            // .targetHealthStates(TargetGroupTargetHealthStateArgs.builder() 
-            //     .enableUnhealthyConnectionTermination(false)
-            //     .build())
-            .healthCheck(new com.pulumi.aws.alb.inputs.TargetGroupHealthCheckArgs.Builder()
-                .path("/healthz")
-                .matcher("200")
-                .healthyThreshold(2)
-                .unhealthyThreshold(3)
-                .interval(15)
-                .timeout(5)
+            .targetType("instance")
+            // .targetHealthStates(Arrays.asList(com.pulumi.aws.alb.inputs.TargetGroupTargetHealthStateArgs.builder() 
+            //         .enableUnhealthyConnectionTermination(true)
+            //     .build()))
+            .healthCheck(com.pulumi.aws.alb.inputs.TargetGroupHealthCheckArgs.builder()
+                .path("/")
+                .protocol("HTTP")
+                .healthyThreshold(5)
+                .unhealthyThreshold(5)
                 
                 .build()
             )
@@ -564,17 +652,29 @@ public class App {
         );
 
 
-        LoadBalancer apploadBalancer = new LoadBalancer("webappLoadBalancer", LoadBalancerArgs.builder()
+        // LoadBalancer apploadBalancer = new LoadBalancer("webappLoadBalancer", LoadBalancerArgs.builder()
+        //     .loadBalancerType("application")
+        //     .subnets(subnetIdsOutputPub)
+        //     .internal(false)
+        //     .securityGroups(lbSecGrpOutput)
+            
+        //     .build()
+        // );
+
+
+        com.pulumi.aws.alb.LoadBalancer apploadBalancer1 = new com.pulumi.aws.alb.LoadBalancer("webappLoadBalancer", com.pulumi.aws.alb.LoadBalancerArgs.builder()
             .loadBalancerType("application")
             .subnets(subnetIdsOutputPub)
             .internal(false)
             .securityGroups(lbSecGrpOutput)
+            
             .build()
         );
+        
 
         
 
-        //Output<List<?>> tghealthStates = Output.all(healthStates).applyValue(ids -> ids);
+        
 
         
 
@@ -582,30 +682,44 @@ public class App {
 
 
 
-        Output<List<String>> tgOutput = Output.all(tg.arn()).applyValue(ids -> ids);
+        Output<List<String>> tgOutput = Output.all(tg1.arn()).applyValue(ids -> ids);
 
         
 
         
 
         
+        
 
 
-        Listener httpListener = new Listener("http-listener", ListenerArgs.builder()
-            .loadBalancerArn(apploadBalancer.arn())
+        // Listener httpListener = new Listener("http-listener", ListenerArgs.builder()
+        //     .loadBalancerArn(apploadBalancer.arn())
+        //     .port(8081)
+        //     .protocol("HTTP")
+            
+        //     .defaultActions(new ListenerDefaultActionArgs.Builder()
+        //         .type("forward")
+        //         .targetGroupArn(tg.arn())
+        //         .build()
+        //     )
+        //     .build()
+        // );
+
+        com.pulumi.aws.alb.Listener httpl = new com.pulumi.aws.alb.Listener("Listener",com.pulumi.aws.alb.ListenerArgs.builder()
+            .loadBalancerArn(apploadBalancer1.arn())
             .port(80)
             .protocol("HTTP")
-            .defaultActions(new ListenerDefaultActionArgs.Builder()
-                .type("forward")
-                .targetGroupArn(tg.arn())
+            
+            .defaultActions(com.pulumi.aws.alb.inputs.ListenerDefaultActionArgs.builder()
+                .type("forward") 
+                .targetGroupArn(tg1.arn())
                 .build()
             )
             .build()
         );
-
-        var autoScaingAttachment = new Attachment("example", AttachmentArgs.builder()        
+        Attachment autoScaingAttachment = new Attachment("example", AttachmentArgs.builder()        
             .autoscalingGroupName(csye6225f23_ScalingGroup.name())
-            .lbTargetGroupArn(tg.arn())
+            .lbTargetGroupArn(tg1.arn())
             .build());
 
             
@@ -654,12 +768,92 @@ public class App {
             .allowOverwrite(true)
             //.records(csye6225f23_ScalingGroupOutput)
             .aliases(RecordAliasArgs.builder()
-                .name(apploadBalancer.dnsName())
-                .zoneId(apploadBalancer.zoneId())
+                .name(apploadBalancer1.dnsName())
+                .zoneId(apploadBalancer1.zoneId())
                 .evaluateTargetHealth(true)
                 .build()
             )
         .build());
+
+        Topic mySnsTopic = new Topic("SnsTopic-csye6225",TopicArgs.builder()
+            .build()
+        );
+
+        String existingBucketName = "csye6225gcp-bucket"; 
+        Output<String> existingBucketNameOutput = Output.of(existingBucketName);
+        com.pulumi.gcp.storage.Bucket existingBucket = com.pulumi.gcp.storage.Bucket.get("existing_bucket", existingBucketNameOutput,null,null);
+
+
+        com.pulumi.gcp.serviceAccount.Account gcpServiceAccount = new  com.pulumi.gcp.serviceAccount.Account("myServiceAccount",com.pulumi.gcp.serviceAccount.AccountArgs.builder()
+            .project("academic-osprey-406507")
+            .accountId("academic-osprey-406507")
+        .build());
+
+        
+        com.pulumi.gcp.serviceAccount.Key gcpServiceAccountKey = new  com.pulumi.gcp.serviceAccount.Key("myServiceAccount",com.pulumi.gcp.serviceAccount.KeyArgs.builder()
+            
+            .serviceAccountId(gcpServiceAccount.name())
+        .build());
+
+        List<String> permissions = new ArrayList<>();
+        permissions.add("cloudfunctions.functions.invoke");
+
+        Output<List<String>> permissionsOutput = Output.of(permissions).applyValue(ids->ids);
+
+        com.pulumi.gcp.projects.IAMCustomRole gcpRole = new com.pulumi.gcp.projects.IAMCustomRole("gcpRole",com.pulumi.gcp.projects.IAMCustomRoleArgs.builder()
+            .roleId("myapplambdarole")
+            .project("academic-osprey-406507")
+            .title("LambdaRole")
+            .description("IAM role for lambda Function")
+            .permissions(permissionsOutput)
+        .build()
+        );
+
+        com.pulumi.gcp.projects.IAMPolicy gcpPolicy = new com.pulumi.gcp.projects.IAMPolicy("gcpPolicy",com.pulumi.gcp.projects.IAMPolicyArgs.builder()
+            .project("academic-osprey-406507")
+            .policyData(Output.format("{\"bindings\":[{\"role\":\"%s\",\"members\":[\"user:aditya.3342@gmail.com\"]}]}", gcpRole.name()))
+        .build()
+        );
+
+        Map<String,Object> environmentSecrets = new HashMap<>();
+        environmentSecrets.put("EMAIL_SERVER_SECRET","emailServerSecret");
+
+        Output<Map<String, Object>> environmentSecretsOutput = Output.of(environmentSecrets);
+
+        
+        Output<String> deployedURL = Output.of("https://github.com/adityaraj-270301/serverless.git");
+        
+        
+
+        
+        com.pulumi.gcp.cloudfunctions.Function lambdaFunction = new com.pulumi.gcp.cloudfunctions.Function("lambdaFunction", com.pulumi.gcp.cloudfunctions.FunctionArgs.builder()
+            .project("academic-osprey-406507")
+            .region("us-east-1")
+            .runtime("nodejs14")
+            // .sourceRepository(FunctionSourceRepositoryArgs.builder()
+            //     .deployedUrl(deployedURL)
+            
+            // .build()
+            // )
+            .sourceArchiveBucket(existingBucketName)
+            .sourceArchiveObject("/Users/adityaraj/Documents/CSYE6225 Network Structures & Cloud Computing/serverless-l.zip")
+            .entryPoint("index.js")
+            
+            .environmentVariables(environmentSecretsOutput)
+        .build()
+        );
+
+        Table dynamoDbTable = new Table("myDynamoDBTable",TableArgs.builder()
+            .name("DynamoTable")
+            .attributes(TableAttributeArgs.builder()
+                .name("ID")
+                .type("S")
+            .build()
+            )
+            .hashKey("ID")
+            .billingMode("PAY_PER_REQUEST")
+        .build()
+        );
             
     }
 }
